@@ -90,7 +90,7 @@ main_loop:
     
     cmp file_size,0000h
     jne main_loop
-;===================================     
+   
 close_file_exit: 
     call close_file 
     
@@ -102,8 +102,7 @@ exit:
     mov ah,4Ch
     mov al,00h
     int 21h 
-;////////////////////////////////////////////////////////////
-;===================PROC===================================== 
+;Functions
 
 move_cmd proc USES si, di
 		push cx
