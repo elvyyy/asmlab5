@@ -98,6 +98,17 @@ close_file_exit:
     xor ax, ax      ; 
     mov ah, 3Eh     ; close file
     int 21h
+	
+	mov ah, 41h                         ;del a file
+    lea dx, file_name
+    int 21h 
+	
+	xor ax, ax
+    mov ah, 56h                         ;rename
+    lea dx, new_file_name
+    lea di, file_name
+    int 21h  
+	
 exit:    
     mov ah,4Ch
     mov al,00h
@@ -458,6 +469,7 @@ get_output_buf_size proc
 check_$:    
     cmp [si],'$'
     jne loop_get_out_size
+	dec buffer_size
     mov [si],00h
     jmp end_check_counting
 end_check_counting:    
@@ -620,7 +632,7 @@ write_into_new_file proc
     mov bx,new_file_handle 
     call get_output_buf_size
     mov cx,buffer_size
-    inc cx
+    ;inc cx
     lea dx,file_buffer
     int 21h
 	
