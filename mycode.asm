@@ -7,7 +7,7 @@ file_name 					db 50 dup('$')
 file_handle 				dw 0000h 
 file_size 					dw 0000h
 
-new_file_name 				db "newfile.txt", 0    
+new_file_name 				db '/', 50 dup(0), 0   
 new_file_handle 			dw 0000h 
 
 msgFileError 				db 10,13,"No such file in directory$",10,13,'$'
@@ -67,6 +67,14 @@ main:
   
 	call move_cmd
     call process_command_line
+	
+	lea si, file_name
+	lea di, new_file_name
+	mov cx, 11
+	REPE cmpsb
+	cmp cx, 0
+	je exit
+	
     call open_file 
     mov  file_handle, ax             ;get a file handle  
     call get_size_of_file
@@ -578,7 +586,7 @@ change_word endp
 ;CREATING NEW RESULTING FILE
 create_new_file proc
     pusha
-        mov ah, 3Ch
+        mov ah, 5Ah
         mov cx,0000h 
         lea dx, new_file_name
         int 21h
