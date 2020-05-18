@@ -5,7 +5,8 @@ cmd_line 					db 127 dup('$')
 
 file_name 					db 50 dup('$')   
 file_handle 				dw 0000h 
-file_size 					dw 0000h
+file_size 					dw 0000h  
+invalid_arg					db 50 dup('$')
 
 new_file_name 				db '/', 50 dup(0), 0   
 new_file_handle 			dw 0000h 
@@ -143,7 +144,9 @@ process_command_line proc
     je error_cmd
     push si
     lea si,word_to_replace
-    call get_cmd_word_size
+    call get_cmd_word_size       
+    cmp ax, maxWordSize
+    je error_cmd
     mov word_to_replace_size,ax
     pop si 
     
@@ -151,13 +154,17 @@ process_command_line proc
     call get_cmd_word
     cmp new_word,'$'
     je error_cmd 
+    push si
     lea si,new_word 
     call get_cmd_word_size
+    cmp ax, maxWordSize
+    je error_cmd
     mov size_of_new_word,ax  
-    
-    ;call get_cmd_word
-    ;cmp new_word, '$'
-    ;jne error_cmd
+     
+    pop si
+    dec si
+    cmp [si], ' '
+    je error_cmd
     
     popa
     ret
