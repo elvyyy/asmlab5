@@ -24,7 +24,7 @@ cmdBUFFER 					db 52 dup(0)
 
 start_buffer_pos 			dw 0000h
 end_buffer_pos 				dw 0000h
-file_buffer 				db 202 dup ('$')
+file_buffer 				db 300 dup ('$')
 buffer_size 				dw 0000h 
 new_buffer_size 			dw 0000h
 amount_of_bytes_to_shift 	dw 0000h
@@ -32,9 +32,9 @@ amount_of_bytes_to_shift 	dw 0000h
 delem 						db " .,!",09H,0Dh,0Ah
 
 word_to_replace 			db 54 dup ('$') 
-word_size 					dw 0
+word_to_replace_size 					dw 0
 new_word 					db 54 dup ('$')                       
-size_of_new_word 				dw 0 
+size_of_new_word 			dw 0 
 	
 current_indexL 				dw 0000h 
 current_indexH 				dw 0000h 
@@ -51,14 +51,6 @@ print_str macro out_str
     popa
 endm 
 
-get_word macro inp_str
-    pusha
-    mov ah, 0Ah
-    lea dx, inp_str
-    int 21h
-    popa
-endm  
-
 main:
     mov ax,@data
     mov es,ax
@@ -67,13 +59,6 @@ main:
   
 	call move_cmd
     call process_command_line
-	
-	lea si, file_name
-	lea di, new_file_name
-	mov cx, 11
-	REPE cmpsb
-	cmp cx, 0
-	je exit
 	
     call open_file 
     mov  file_handle, ax             ;get a file handle  
@@ -145,6 +130,9 @@ process_command_line proc
     mov cl,cmd_length				; length of cmd line
     lea si,cmd_line					; cmd line
     
+    cmp cmd_length, 0
+    je error_cmd
+    
     lea di,file_name
     call get_cmd_word 
     
@@ -156,7 +144,7 @@ process_command_line proc
     push si
     lea si,word_to_replace
     call get_cmd_word_size
-    mov word_size,ax
+    mov word_to_replace_size,ax
     pop si 
     
     lea di,new_word
@@ -165,7 +153,12 @@ process_command_line proc
     je error_cmd 
     lea si,new_word 
     call get_cmd_word_size
-    mov size_of_new_word,ax
+    mov size_of_new_word,ax  
+    
+    ;call get_cmd_word
+    ;cmp new_word, '$'
+    ;jne error_cmd
+    
     popa
     ret
 error_cmd:
@@ -225,10 +218,17 @@ get_cmd_word_size proc USES ax         	; calc size of words
 	    inc ax                                                                      
 	    jmp startCalc           
 	                            
-endCalc:                   
+endCalc:  
+	cmp ax, 50
+	ja cmd_word_size_error
+                 
 	pop si                      
 	pop bx                     
-	ret                         
+	ret                   
+
+cmd_word_size_error:
+	print_str msgCMD_Error
+	jmp exit
 get_cmd_word_size endp                          
     
 open_file proc USES ax
@@ -258,24 +258,26 @@ read_file proc
     call set_cursor						; set cursor after the last processed byte
     
     mov bx, file_handle              
-    mov ah, 3Fh                                             
-    mov cx, count_of_read_bytes         	; expected value
-    mov dx, offset file_buffer    
+    mov ah, 3Fh                             ; читать файл через дескриптор                
+    mov cx, count_of_read_bytes         	; число считываемых байт
+    mov dx, offset file_buffer    			; адрес буфера для чтения данных
     int 21h   
     
-    mov read_bytes, ax					; actual value
+    mov read_bytes, ax					; после выполнения 3Fh, в ах поместится число действительно 
+										;считанных байт
+	; ????
     dec ax
     mov buffer_size,ax
     mov new_buffer_size,ax
     mov amount_of_bytes_to_shift,ax 
       
-    mov ax,count_of_read_bytes  			; test of
+    mov ax,count_of_read_bytes  			; количество байт для чтения
     clc									; clear carry
     add current_indexH,ax 
-    jc add_l_bytes
+    jc add_l_bytes				 ; если возникло переполнение (2 байта)
     jmp end_reading_file 
     
-add_l_bytes:
+add_l_bytes:				; увеличить старший байт в слечае переполнения
     inc current_indexL
 
 end_reading_file:    
@@ -290,9 +292,9 @@ set_cursor proc
     pusha
       
     mov bx, file_handle
-    mov al, 00h                    
+    mov al, 00h     					; указываем на начало файла               
     xor cx, cx                        
-    mov dx, current_indexH         
+    mov dx, current_indexH         		; устанавливаем положение в файле 
     mov cx, current_indexL        
     mov ah, 42h 						; move read/write courser
     int 21h
@@ -331,6 +333,12 @@ shrink_buffer_to_word proc
     je its_normal
     cmp [si],' '
     je its_normal
+	cmp [si],'.'
+    je its_normal
+	cmp [si],','
+    je its_normal
+	cmp [si],'!'
+    je its_normal
     mov [si],'$'
     dec si
     dec current_indexH
@@ -343,13 +351,13 @@ shrink_buffer_to_word endp
  
 get_size_of_file proc
     pusha    
-    xor cx,cx
+    xor cx,cx							; cx:dx - расстояние на которое нужно переместить указатель
     xor dx,dx
-    mov ah,42h
-    mov al,02h
-    mov bx,file_handle
+    mov ah,42h							; функция перемещения указателя чтения/записи
+    mov al,02h							; перемещать относительно конца файла
+    mov bx,file_handle					
     int 21h 
-    mov file_size,ax
+    mov file_size,ax					
     popa 
     ret
 get_size_of_file endp 
@@ -360,18 +368,18 @@ find_words_to_replace proc
 
     loop1:
 
-        mov start_buffer_pos,si
-        lea di,word_to_replace
-        mov cx,word_size  
+        mov start_buffer_pos,si				; начало буффера
+        lea di,word_to_replace				; слово, которое будет заменяться
+        mov cx,word_to_replace_size  		; размер слова, которое будет заменяится
         REPE cmpsb
         cmp cx,0000h
         je find 
 continue_loop1:
  
-        sub cx,word_size
+        sub cx,word_to_replace_size
         not cx
         inc cx
-        sub new_buffer_size,cx 
+        sub new_buffer_size,cx 				; отнять количество уже обработанных байт 
         sub amount_of_bytes_to_shift,cx
         ;sub file_size,cx 
         cmp file_size,0000h
@@ -414,7 +422,7 @@ to_finish_word:
     
 check_before_word: 
 	push si   
-    sub si, word_size
+    sub si, word_to_replace_size
     dec si
     
     cmp [si], ' '
@@ -431,7 +439,7 @@ check_before_word:
     je to_finish_word
     
     
-    ;add si, word_size
+    ;add si, word_to_replace_size
     pop si 
      
     jmp continue_loop1
@@ -450,13 +458,14 @@ ch_buf_endp:
     jne all_is_clear 
 end_:    
     mov file_size,0000h
-    mov cx,word_size
+    mov cx,word_to_replace_size
     sub cx,size_of_new_word 
     sub si,cx
     dec si
 all_is_clear:   
+	inc si
     mov [si],00h
-    inc si
+    ;inc si
     loop all_is_clear              
     popa
     ret
@@ -477,7 +486,7 @@ get_output_buf_size proc
 check_$:    
     cmp [si],'$'
     jne loop_get_out_size
-	dec buffer_size
+	;dec buffer_size
     mov [si],00h
     jmp end_check_counting
 end_check_counting:    
@@ -487,7 +496,7 @@ get_output_buf_size endp
 
 ;MOVSB CHGWORD AND NEW WORD        
 change_word proc
-    mov si,start_buffer_pos
+    mov si,start_buffer_pos			; откуда начинается слово, которое нужно заменить
     mov di,si
     mov cx,size_of_new_word    
 
@@ -522,7 +531,7 @@ get_pos_to_ch:
     jne get_pos_to_ch 
     
 found_end_of_word:      
-    mov ax, word_size
+    mov ax, word_to_replace_size
     cmp size_of_new_word,ax
     ja add_to_right								; if the new word is bigger
     cld											; clear duration
@@ -538,7 +547,7 @@ add_to_right:
     inc cx
     mov di,si
     add di,size_of_new_word
-    sub di,word_size
+    sub di,word_to_replace_size
     
     std  
     jmp replace_word_loop
@@ -559,7 +568,7 @@ replace_word_loop:
     repe movsb
     mov ax, buffer_size					; recalc buffer size
     add ax, size_of_new_word
-    sub ax, word_size
+    sub ax, word_to_replace_size
     mov buffer_size, ax
     ;/////////////////////////
     cld
@@ -588,9 +597,9 @@ create_new_file proc
     pusha
         mov ah, 5Ah
         mov cx,0000h 
-        lea dx, new_file_name
+        lea dx, new_file_name 			; адрес строки ASCIIZ с диском и путем (заканчивается \)
         int 21h
-        mov new_file_handle, ax  
+        mov new_file_handle, ax  		; в аx помещается дескриптор файла
               
     popa
     ret
@@ -608,9 +617,9 @@ open_new_file endp
 recalculate_new_buffer_length proc
     pusha
     mov ax,new_buffer_size
-    sub ax,word_size
+    sub ax,word_to_replace_size
     add ax,size_of_new_word
-    ;mov new_buffer_size,ax
+    mov new_buffer_size,ax
     popa
     ret
 recalculate_new_buffer_length endp 
@@ -619,6 +628,8 @@ get_end_pos_buf proc
     pusha
     mov ax,start_buffer_pos
     add ax,buffer_size
+	; ??????
+	;inc ax
     mov end_buffer_pos,ax
     popa
     ret
@@ -664,7 +675,7 @@ write_into_new_file endp
 flush_buffer proc
     pusha
     lea si,file_buffer
-    mov cx,202
+    mov cx,300
     init_$_buf:
     mov [si],'$'
     inc si
