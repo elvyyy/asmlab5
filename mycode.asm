@@ -6,7 +6,6 @@ cmd_line 					db 127 dup('$')
 file_name 					db 50 dup('$')   
 file_handle 				dw 0000h 
 file_size 					dw 0000h  
-invalid_arg					db 50 dup('$')
 
 new_file_name 				db '/', 50 dup(0), 0   
 new_file_handle 			dw 0000h 
@@ -17,7 +16,7 @@ msgFileClosed 				db 10,13,"File is closed!$",10,13,'$'
 msgCMD_Error 				db 10,13,"Error occured while parsing cmdline",10,13,'$'
 msgErrorMoving 				db 10,13,"Error moving pointer...$",10,13,'$'
 
-count_of_read_bytes 		dw 3Eh 
+count_of_read_bytes 		dw 40h 
 
 maxWordSize 				equ 50
 cmdBufSize 					db 52 dup(0)
@@ -25,7 +24,7 @@ cmdBUFFER 					db 52 dup(0)
 
 start_buffer_pos 			dw 0000h
 end_buffer_pos 				dw 0000h
-file_buffer 				db 300 dup ('$')
+file_buffer 				db 500 dup ('$')
 buffer_size 				dw 0000h 
 new_buffer_size 			dw 0000h
 amount_of_bytes_to_shift 	dw 0000h
@@ -548,7 +547,7 @@ add_to_right:
     add_to_right_loop:
     inc si
     inc amount_of_bytes_to_shift
-    cmp [si], 00
+    cmp [si], '$'
     jne add_to_right_loop
     mov cx,amount_of_bytes_to_shift
     inc cx
@@ -682,7 +681,7 @@ write_into_new_file endp
 flush_buffer proc
     pusha
     lea si,file_buffer
-    mov cx,300
+    mov cx,500
     init_$_buf:
     mov [si],'$'
     inc si
