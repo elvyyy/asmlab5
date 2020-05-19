@@ -404,7 +404,16 @@ continue_loop1:
             je loop1
             jne loop2
     find:                
+    dec si
+    dec di
+    cmpsb
+    je cont_find
+    inc si
+    inc di
+    jmp continue_loop1
     
+
+cont_find:    
     cmp [si], ' '
     je check_before_word
     cmp [si], 0Ah
